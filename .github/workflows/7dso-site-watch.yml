@@ -1,0 +1,44 @@
+name: 7DSO Site Watch (News/Notices/Dev)
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"  # toutes les 20 minutes
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm i playwright
+          npx playwright install --with-deps chromium
+
+      - name: Run monitor
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+        run: node monitor.mjs
+
+      - name: Commit state if changed
+        run: |
+          if git diff --quiet; then
+            echo "No state change."
+            exit 0
+          fi
+          git config user.name "7dso-watch"
+          git config user.email "actions@github.com"
+          git add state.json
+          git commit -m "Update last seen"
+          git push
