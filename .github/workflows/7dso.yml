@@ -1,0 +1,48 @@
+name: 7DSO News Monitor
+
+on:
+  schedule:
+    - cron: "*/20 * * * *"   # vérifie toutes les 20 minutes
+  workflow_dispatch:
+
+jobs:
+  check-news:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Fetch website
+        run: |
+          curl -s https://7origin.netmarble.com/en/ > page.html
+
+      - name: Extract latest news title
+        run: |
+          grep -oP '(?<=Notices</span>).*?(?=</li>)' page.html | head -1 > latest.txt || true
+
+      - name: Compare with previous
+        run: |
+          if [ -f last.txt ]; then
+            diff latest.txt last.txt && echo "No change" && exit 0
+          fi
+
+      - name: Send to Discord
+        run: |
+          TITLE=$(cat latest.txt | sed 's/<[^>]*>//g' | head -1)
+          curl -H "Content-Type: application/json" \
+          -X POST \
+          -d "{\"embeds\":[{\"title\":\"📣 Nouvelle annonce 7DS Origins\",\"description\":\"$TITLE\",\"color\":15844367,\"url\":\"https://7origin.netmarble.com/en/\"}]}" \
+          ${{ secrets.DISCORD_WEBHOOK }}
+
+      - name: Save current
+        run: |
+          mv latest.txt last.txt || true
+
+      - name: Commit state
+        run: |
+          git config --global user.name "bot"
+          git config --global user.email "bot@bot.com"
+          git add last.txt || true
+          git commit -m "update" || true
+          git push || true
